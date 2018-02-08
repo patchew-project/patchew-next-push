@@ -668,6 +668,8 @@ typedef uint32_t FeatureWordArray[FEATURE_WORDS];
 
 #define CPUID_8000_0008_EBX_IBPB    (1U << 12) /* Indirect Branch Prediction Barrier */
 
+#define CPUID_PV_DEDICATED     (1U << 8)
+
 #define CPUID_XSAVE_XSAVEOPT   (1U << 0)
 #define CPUID_XSAVE_XSAVEC     (1U << 1)
 #define CPUID_XSAVE_XGETBV1    (1U << 2)
@@ -1272,6 +1274,7 @@ struct X86CPU {
     bool expose_kvm;
     bool expose_tcg;
     bool migratable;
+    bool pv_dedicated;
     bool max_features; /* Enable all supported features automatically */
     uint32_t apic_id;
 
