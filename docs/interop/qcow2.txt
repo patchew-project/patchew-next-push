@@ -47,7 +47,7 @@ The first cluster of a qcow2 image contains the file header:
                     1 for AES encryption
                     2 for LUKS encryption
 
-         36 - 39:   l1_size
+         36 - 39:   l1_entries
                     Number of entries in the active L1 table
 
          40 - 47:   l1_table_offset
@@ -538,7 +538,7 @@ Structure of a bitmap directory entry:
                     (described below) for the bitmap starts. Must be aligned to
                     a cluster boundary.
 
-         8 - 11:    bitmap_table_size
+         8 - 11:    bitmap_table_entries
                     Number of entries in the bitmap table of the bitmap.
 
         12 - 15:    flags
