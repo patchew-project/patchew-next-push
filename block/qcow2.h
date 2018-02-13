@@ -68,10 +68,10 @@
 #define MAX_CLUSTER_BITS 21
 
 /* Must be at least 2 to cover COW */
-#define MIN_L2_CACHE_SIZE 2 /* cache entries */
+#define MIN_L2_CACHE_ENTRIES 2
 
 /* Must be at least 4 to cover all cases of refcount table growth */
-#define MIN_REFCOUNT_CACHE_SIZE 4 /* clusters */
+#define MIN_REFCOUNT_CACHE_ENTRIES 4
 
 /* Whichever is more */
 #define DEFAULT_L2_CACHE_CLUSTERS 8 /* clusters */

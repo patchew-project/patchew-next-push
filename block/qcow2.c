@@ -843,6 +843,7 @@ static int qcow2_update_options_prepare(BlockDriverState *bs,
     const char *opt_overlap_check, *opt_overlap_check_template;
     int overlap_check_template = 0;
     uint64_t l2_cache_size, l2_cache_entry_size, refcount_cache_size;
+    uint64_t l2_cache_entries, refcount_cache_entries;
     int i;
     const char *encryptfmt;
     QDict *encryptopts = NULL;
@@ -869,21 +870,21 @@ static int qcow2_update_options_prepare(BlockDriverState *bs,
         goto fail;
     }
 
-    l2_cache_size /= l2_cache_entry_size;
-    if (l2_cache_size < MIN_L2_CACHE_SIZE) {
-        l2_cache_size = MIN_L2_CACHE_SIZE;
+    l2_cache_entries = l2_cache_size / l2_cache_entry_size;
+    if (l2_cache_entries < MIN_L2_CACHE_ENTRIES) {
+        l2_cache_entries = MIN_L2_CACHE_ENTRIES;
     }
-    if (l2_cache_size > INT_MAX) {
+    if (l2_cache_entries > INT_MAX) {
         error_setg(errp, "L2 cache size too big");
         ret = -EINVAL;
         goto fail;
     }
 
-    refcount_cache_size /= s->cluster_size;
-    if (refcount_cache_size < MIN_REFCOUNT_CACHE_SIZE) {
-        refcount_cache_size = MIN_REFCOUNT_CACHE_SIZE;
+    refcount_cache_entries = refcount_cache_size / s->cluster_size;
+    if (refcount_cache_entries < MIN_REFCOUNT_CACHE_ENTRIES) {
+        refcount_cache_entries = MIN_REFCOUNT_CACHE_ENTRIES;
     }
-    if (refcount_cache_size > INT_MAX) {
+    if (refcount_cache_entries > INT_MAX) {
         error_setg(errp, "Refcount cache size too big");
         ret = -EINVAL;
         goto fail;
@@ -908,9 +909,9 @@ static int qcow2_update_options_prepare(BlockDriverState *bs,
     }
 
     r->l2_slice_size = l2_cache_entry_size / sizeof(uint64_t);
-    r->l2_table_cache = qcow2_cache_create(bs, l2_cache_size,
+    r->l2_table_cache = qcow2_cache_create(bs, l2_cache_entries,
                                            l2_cache_entry_size);
-    r->refcount_block_cache = qcow2_cache_create(bs, refcount_cache_size,
+    r->refcount_block_cache = qcow2_cache_create(bs, refcount_cache_entries,
                                                  s->cluster_size);
     if (r->l2_table_cache == NULL || r->refcount_block_cache == NULL) {
         error_setg(errp, "Could not allocate metadata caches");
