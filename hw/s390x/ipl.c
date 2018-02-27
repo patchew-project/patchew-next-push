@@ -250,7 +250,9 @@ static void s390_ipl_set_boot_menu(S390IPLState *ipl)
     case S390_IPL_TYPE_QEMU_SCSI:
         break;
     default:
-        error_report("boot menu is not supported for this device type.");
+        if (boot_menu) {
+            error_report("boot menu is not supported for this device type.");
+        }
         return;
     }
 
