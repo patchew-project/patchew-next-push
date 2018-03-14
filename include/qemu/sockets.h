@@ -110,4 +110,7 @@ SocketAddress *socket_remote_address(int fd, Error **errp);
  */
 SocketAddress *socket_address_flatten(SocketAddressLegacy *addr);
 
+char *SocketAddress_to_str(const char *prefix, SocketAddress *addr,
+                           bool is_listen, bool is_telnet);
+
 #endif /* QEMU_SOCKETS_H */
