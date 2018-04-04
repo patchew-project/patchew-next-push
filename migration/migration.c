@@ -31,6 +31,8 @@
 #include "migration/vmstate.h"
 #include "block/block.h"
 #include "qapi/error.h"
+#include "qapi/clone-visitor.h"
+#include "qapi/qapi-visit-sockets.h"
 #include "qapi/qapi-commands-migration.h"
 #include "qapi/qapi-events-migration.h"
 #include "qapi/qmp/qerror.h"
@@ -275,6 +277,21 @@ int migrate_send_rp_req_pages(MigrationIncomingState *mis, const char *rbname,
     }
 
     return migrate_send_rp_message(mis, msg_type, msglen, bufc);
+}
+
+void migrate_set_address(SocketAddress *address)
+{
+    MigrationState *s = migrate_get_current();
+    SocketAddressList *addrs;
+
+    addrs = g_new0(SocketAddressList, 1);
+    addrs->next = s->parameters.socket_address;
+    s->parameters.socket_address = addrs;
+
+    if (!s->parameters.has_socket_address) {
+        s->parameters.has_socket_address = true;
+    }
+    addrs->value = QAPI_CLONE(SocketAddress, address);
 }
 
 void qemu_start_incoming_migration(const char *uri, Error **errp)
@@ -564,6 +581,11 @@ MigrationParameters *qmp_query_migrate_parameters(Error **errp)
     params->x_multifd_page_count = s->parameters.x_multifd_page_count;
     params->has_xbzrle_cache_size = true;
     params->xbzrle_cache_size = s->parameters.xbzrle_cache_size;
+    if (s->parameters.socket_address) {
+        params->has_socket_address = true;
+        params->socket_address =
+            QAPI_CLONE(SocketAddressList, s->parameters.socket_address);
+    }
 
     return params;
 }
@@ -2571,6 +2593,9 @@ static void migration_instance_finalize(Object *obj)
     qemu_mutex_destroy(&ms->error_mutex);
     g_free(params->tls_hostname);
     g_free(params->tls_creds);
+    if (params->socket_address) {
+        qapi_free_SocketAddressList(params->socket_address);
+    }
     qemu_sem_destroy(&ms->pause_sem);
     error_free(ms->error);
 }
