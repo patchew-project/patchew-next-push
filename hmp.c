@@ -355,6 +355,20 @@ void hmp_info_migrate_parameters(Monitor *mon, const QDict *qdict)
         monitor_printf(mon, "%s: %" PRIu64 "\n",
             MigrationParameter_str(MIGRATION_PARAMETER_XBZRLE_CACHE_SIZE),
             params->xbzrle_cache_size);
+        if (params->has_socket_address) {
+            SocketAddressList *addr;
+
+            monitor_printf(mon, "%s: [\n",
+                MigrationParameter_str(MIGRATION_PARAMETER_SOCKET_ADDRESS));
+
+            for (addr = params->socket_address; addr; addr = addr->next) {
+                char *s = SocketAddress_to_str("", addr->value,
+                                               false, false);
+                monitor_printf(mon, "\t%s\n", s);
+            }
+
+            monitor_printf(mon, "]\n");
+        }
     }
 
     qapi_free_MigrationParameters(params);

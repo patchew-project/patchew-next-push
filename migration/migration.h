@@ -241,5 +241,6 @@ int migrate_send_rp_req_pages(MigrationIncomingState *mis, const char* rbname,
 
 void dirty_bitmap_mig_before_vm_start(void);
 void init_dirty_bitmap_incoming_migration(void);
+void migrate_set_address(SocketAddress *address);
 
 #endif

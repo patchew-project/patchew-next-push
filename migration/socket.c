@@ -15,6 +15,7 @@
  */
 
 #include "qemu/osdep.h"
+#include "qemu/cutils.h"
 
 #include "qemu-common.h"
 #include "qemu/error-report.h"
@@ -152,6 +153,7 @@ static void socket_start_incoming_migration(SocketAddress *saddr,
                                             Error **errp)
 {
     QIONetListener *listener = qio_net_listener_new();
+    int i;
 
     qio_net_listener_set_name(listener, "migration-socket-listener");
 
@@ -163,6 +165,15 @@ static void socket_start_incoming_migration(SocketAddress *saddr,
     qio_net_listener_set_client_func(listener,
                                      socket_accept_incoming_migration,
                                      NULL, NULL);
+
+    for (i = 0; i < listener->nsioc; i++)  {
+        SocketAddress *address =
+            qio_channel_socket_get_local_address(listener->sioc[i], errp);
+        if (address < 0) {
+            return;
+        }
+        migrate_set_address(address);
+    }
 }
 
 void tcp_start_incoming_migration(const char *host_port, Error **errp)

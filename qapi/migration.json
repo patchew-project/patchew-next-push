@@ -6,6 +6,7 @@
 ##
 
 { 'include': 'common.json' }
+{ 'include': 'sockets.json' }
 
 ##
 # @MigrationStats:
@@ -494,6 +495,9 @@
 #                     and a power of 2
 #                     (Since 2.11)
 #
+# @socket-address: Only used for tcp, to know what the real port is
+#                  (Since 2.13)
+#
 # Since: 2.4
 ##
 { 'enum': 'MigrationParameter',
@@ -502,7 +506,7 @@
            'tls-creds', 'tls-hostname', 'max-bandwidth',
            'downtime-limit', 'x-checkpoint-delay', 'block-incremental',
            'x-multifd-channels', 'x-multifd-page-count',
-           'xbzrle-cache-size' ] }
+           'xbzrle-cache-size', 'socket-address' ] }
 
 ##
 # @MigrateSetParameters:
@@ -671,6 +675,10 @@
 #                     needs to be a multiple of the target page size
 #                     and a power of 2
 #                     (Since 2.11)
+#
+# @socket-address: Only used for tcp, to know what the real port is
+#                  (Since 2.13)
+#
 # Since: 2.4
 ##
 { 'struct': 'MigrationParameters',
@@ -687,7 +695,8 @@
             '*block-incremental': 'bool' ,
             '*x-multifd-channels': 'uint8',
             '*x-multifd-page-count': 'uint32',
-            '*xbzrle-cache-size': 'size' } }
+            '*xbzrle-cache-size': 'size',
+            '*socket-address': ['SocketAddress'] } }
 
 ##
 # @query-migrate-parameters:
