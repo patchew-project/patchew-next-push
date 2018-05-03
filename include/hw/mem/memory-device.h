@@ -34,8 +34,8 @@ typedef struct MemoryDeviceClass {
 
     /* required functions that have to be implemented */
     uint64_t (*get_addr)(const MemoryDeviceState *md);
-    uint64_t (*set_addr)(MemoryDeviceState *md);
-    MemoryRegion * (*get_memory_region)(MemoryDeviceState *md);
+    void (*set_addr)(MemoryDeviceState *md, uint64_t addr);
+    MemoryRegion *(*get_memory_region)(MemoryDeviceState *md);
     uint64_t (*get_plugged_size)(const MemoryDeviceState *md);
     uint64_t (*get_region_size)(const MemoryDeviceState *md);
     void (*fill_device_info)(const MemoryDeviceState *md,
