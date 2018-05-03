@@ -32,11 +32,17 @@ typedef struct MemoryDeviceState {
 typedef struct MemoryDeviceClass {
     InterfaceClass parent_class;
 
+    /* required functions that have to be implemented */
     uint64_t (*get_addr)(const MemoryDeviceState *md);
+    uint64_t (*set_addr)(MemoryDeviceState *md);
+    MemoryRegion * (*get_memory_region)(MemoryDeviceState *md);
     uint64_t (*get_plugged_size)(const MemoryDeviceState *md);
     uint64_t (*get_region_size)(const MemoryDeviceState *md);
     void (*fill_device_info)(const MemoryDeviceState *md,
                              MemoryDeviceInfo *info);
+
+    /* optional functions that can be implemented */
+    uint64_t (*get_align)(const MemoryDeviceState *md);
 } MemoryDeviceClass;
 
 MemoryDeviceInfoList *qmp_memory_device_list(void);
