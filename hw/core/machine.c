@@ -549,11 +549,31 @@ out:
 static void machine_resource_handler_assign(ResourceHandler *rh,
                                             DeviceState *dev, Error **errp)
 {
+    MachineState *ms = MACHINE(rh);
+    Error *local_err = NULL;
+
+    if (object_dynamic_cast(OBJECT(dev), TYPE_MEMORY_DEVICE)) {
+        MemoryDeviceState *md = MEMORY_DEVICE(dev);
+
+        memory_device_assign(ms, md, &local_err);
+        if (local_err) {
+            goto out;
+        }
+    }
+out:
+    error_propagate(errp, local_err);
 }
 
 static void machine_resource_handler_unassign(ResourceHandler *rh,
                                               DeviceState *dev)
 {
+    MachineState *ms = MACHINE(rh);
+
+    if (object_dynamic_cast(OBJECT(dev), TYPE_MEMORY_DEVICE)) {
+        MemoryDeviceState *md = MEMORY_DEVICE(dev);
+
+        memory_device_unassign(ms, md);
+    }
 }
 
 static void machine_class_init(ObjectClass *oc, void *data)

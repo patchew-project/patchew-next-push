@@ -3144,16 +3144,15 @@ static void spapr_memory_plug(HotplugHandler *hotplug_dev, DeviceState *dev,
     PCDIMMDevice *dimm = PC_DIMM(dev);
     PCDIMMDeviceClass *ddc = PC_DIMM_GET_CLASS(dimm);
     MemoryRegion *mr;
-    uint64_t align, size, addr;
+    uint64_t size, addr;
 
     mr = ddc->get_memory_region(dimm, &local_err);
     if (local_err) {
         goto out;
     }
-    align = memory_region_get_alignment(mr);
     size = memory_region_size(mr);
 
-    pc_dimm_memory_plug(dev, MACHINE(ms), align, &local_err);
+    pc_dimm_memory_plug(dev, MACHINE(ms), &local_err);
     if (local_err) {
         goto out;
     }

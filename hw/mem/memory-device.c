@@ -17,6 +17,8 @@
 #include "qemu/range.h"
 #include "hw/virtio/vhost.h"
 #include "sysemu/kvm.h"
+#include "trace.h"
+
 
 static gint memory_device_addr_sort(gconstpointer a, gconstpointer b)
 {
@@ -68,9 +70,10 @@ static int memory_device_used_region_size(Object *obj, void *opaque)
     return 0;
 }
 
-uint64_t memory_device_get_free_addr(MachineState *ms, const uint64_t *hint,
-                                     uint64_t align, uint64_t size,
-                                     Error **errp)
+static uint64_t memory_device_get_free_addr(MachineState *ms,
+                                            const uint64_t *hint,
+                                            uint64_t align, uint64_t size,
+                                            Error **errp)
 {
     uint64_t address_space_start, address_space_end;
     uint64_t used_region_size = 0;
@@ -237,22 +240,53 @@ void memory_device_pre_assign(MachineState *ms,
     }
 }
 
-void memory_device_plug_region(MachineState *ms, MemoryRegion *mr,
-                               uint64_t addr)
+void memory_device_assign(MachineState *ms, MemoryDeviceState *md,
+                          Error **errp)
 {
-    /* we expect a previous call to memory_device_get_free_addr() */
+    const MachineClass *mc = MACHINE_GET_CLASS(ms);
+    const MemoryDeviceClass *mdc = MEMORY_DEVICE_GET_CLASS(md);
+    const uint64_t size = mdc->get_region_size(md);
+    MemoryRegion *mr = mdc->get_memory_region(md);
+    uint64_t addr = mdc->get_addr(md);
+    uint64_t align = memory_region_get_alignment(mr);
+
+    /* we expect a previous call to memory_device_pre_assign */
     g_assert(ms->device_memory);
+
+    /* our device might have stronger alignment requirements */
+    if (mdc->get_align) {
+        align = MAX(align, mdc->get_align(md));
+    }
+
+    /* for compat handling, some alignment has to be enforced for DIMMs */
+    if (mc->enforce_memory_device_align) {
+        /* align unchanged if nothing is to be enforced */
+        mc->enforce_memory_device_align(mc, md, &align);
+    }
+
+    addr = memory_device_get_free_addr(ms, !addr ? NULL : &addr, align,
+                                       size, errp);
+    if (*errp) {
+        return;
+    }
+    trace_memory_device_assign_address(addr);
+    mdc->set_addr(md, addr);
 
     memory_region_add_subregion(&ms->device_memory->mr,
                                 addr - ms->device_memory->base, mr);
 }
 
-void memory_device_unplug_region(MachineState *ms, MemoryRegion *mr)
+void memory_device_unassign(MachineState *ms, MemoryDeviceState *md)
 {
-    /* we expect a previous call to memory_device_get_free_addr() */
+    const MemoryDeviceClass *mdc = MEMORY_DEVICE_GET_CLASS(md);
+    MemoryRegion *mr = mdc->get_memory_region(md);
+
+    /* we expect a previous call to memory_device_pre_assign */
     g_assert(ms->device_memory);
 
     memory_region_del_subregion(&ms->device_memory->mr, mr);
+    trace_memory_device_unassign_address(mdc->get_addr(md));
+    mdc->set_addr(md, 0);
 }
 
 static const TypeInfo memory_device_info = {
