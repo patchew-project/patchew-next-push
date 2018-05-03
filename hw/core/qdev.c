@@ -35,6 +35,7 @@
 #include "qemu/error-report.h"
 #include "qemu/option.h"
 #include "hw/hotplug.h"
+#include "hw/resource-handler.h"
 #include "hw/boards.h"
 #include "hw/sysbus.h"
 
@@ -269,6 +270,17 @@ HotplugHandler *qdev_get_hotplug_handler(DeviceState *dev)
         hotplug_ctrl = qdev_get_machine_hotplug_handler(dev);
     }
     return hotplug_ctrl;
+}
+
+static ResourceHandler *qdev_get_resource_handler(DeviceState *dev)
+{
+    MachineState *ms = MACHINE(qdev_get_machine());
+    MachineClass *mc = MACHINE_GET_CLASS(ms);
+
+    if (mc->get_resource_handler) {
+            return mc->get_resource_handler(ms, dev);
+    }
+    return NULL;
 }
 
 static int qdev_reset_one(DeviceState *dev, void *opaque)
@@ -814,6 +826,7 @@ static void device_set_realized(Object *obj, bool value, Error **errp)
 {
     DeviceState *dev = DEVICE(obj);
     DeviceClass *dc = DEVICE_GET_CLASS(dev);
+    ResourceHandler *resource_ctrl;
     HotplugHandler *hotplug_ctrl;
     BusState *bus;
     Error *local_err = NULL;
@@ -824,6 +837,8 @@ static void device_set_realized(Object *obj, bool value, Error **errp)
         error_setg(errp, QERR_DEVICE_NO_HOTPLUG, object_get_typename(obj));
         return;
     }
+
+    resource_ctrl = qdev_get_resource_handler(dev);
 
     if (value && !dev->realized) {
         if (!check_only_migratable(obj, &local_err)) {
@@ -838,6 +853,13 @@ static void device_set_realized(Object *obj, bool value, Error **errp)
                                       name, obj, &error_abort);
             unattached_parent = true;
             g_free(name);
+        }
+
+        if (resource_ctrl) {
+            resource_handler_pre_assign(resource_ctrl, dev, &local_err);
+            if (local_err != NULL) {
+                goto fail;
+            }
         }
 
         hotplug_ctrl = qdev_get_hotplug_handler(dev);
@@ -858,12 +880,19 @@ static void device_set_realized(Object *obj, bool value, Error **errp)
 
         DEVICE_LISTENER_CALL(realize, Forward, dev);
 
+        if (resource_ctrl) {
+            resource_handler_assign(resource_ctrl, dev, &local_err);
+            if (local_err != NULL) {
+                goto post_realize_fail;
+            }
+        }
+
         if (hotplug_ctrl) {
             hotplug_handler_plug(hotplug_ctrl, dev, &local_err);
         }
 
         if (local_err != NULL) {
-            goto post_realize_fail;
+            goto post_assign_fail;
         }
 
         /*
@@ -903,6 +932,11 @@ static void device_set_realized(Object *obj, bool value, Error **errp)
         if (qdev_get_vmsd(dev)) {
             vmstate_unregister(dev, qdev_get_vmsd(dev), dev);
         }
+
+        if (resource_ctrl) {
+            resource_handler_unassign(resource_ctrl, dev);
+        }
+
         if (dc->unrealize) {
             local_errp = local_err ? NULL : &local_err;
             dc->unrealize(dev, local_errp);
@@ -926,6 +960,11 @@ child_realize_fail:
 
     if (qdev_get_vmsd(dev)) {
         vmstate_unregister(dev, qdev_get_vmsd(dev), dev);
+    }
+
+post_assign_fail:
+    if (resource_ctrl) {
+        resource_handler_unassign(resource_ctrl, dev);
     }
 
 post_realize_fail:

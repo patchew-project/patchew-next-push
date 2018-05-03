@@ -8,6 +8,7 @@
 #include "hw/qdev.h"
 #include "qom/object.h"
 #include "qom/cpu.h"
+#include "hw/resource-handler.h"
 
 /**
  * memory_region_allocate_system_memory - Allocate a board's main memory
@@ -115,6 +116,12 @@ typedef struct {
  *    of HotplugHandler object, which handles hotplug operation
  *    for a given @dev. It may return NULL if @dev doesn't require
  *    any actions to be performed by hotplug handler.
+ * @get_resource_handler: this function is called when a new device is
+ *                        about to be hotplugged. If defined, it returns pointer
+ *                        to an instance of ResourceHandler object, which
+ *                        handles resource asignment for a given @dev. It
+ *                        may return NULL if @dev doesn't require any actions
+ *                        to be performed by a resource handler.
  * @cpu_index_to_instance_props:
  *    used to provide @cpu_index to socket/core/thread number mapping, allowing
  *    legacy code to perform maping from cpu_index to topology properties
@@ -207,6 +214,8 @@ struct MachineClass {
 
     HotplugHandler *(*get_hotplug_handler)(MachineState *machine,
                                            DeviceState *dev);
+    ResourceHandler *(*get_resource_handler)(MachineState *machine,
+                                             const DeviceState *dev);
     CpuInstanceProperties (*cpu_index_to_instance_props)(MachineState *machine,
                                                          unsigned cpu_index);
     const CPUArchIdList *(*possible_cpu_arch_ids)(MachineState *machine);
