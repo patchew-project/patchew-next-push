@@ -517,8 +517,31 @@ void machine_set_cpu_numa_node(MachineState *machine,
     }
 }
 
+static ResourceHandler *machine_get_resource_handler(MachineState *machine,
+                                                     const DeviceState *dev)
+{
+    return NULL;
+}
+
+static void machine_resource_handler_pre_assign(ResourceHandler *rh,
+                                                const DeviceState *dev,
+                                                Error **errp)
+{
+}
+
+static void machine_resource_handler_assign(ResourceHandler *rh,
+                                            DeviceState *dev, Error **errp)
+{
+}
+
+static void machine_resource_handler_unassign(ResourceHandler *rh,
+                                              DeviceState *dev)
+{
+}
+
 static void machine_class_init(ObjectClass *oc, void *data)
 {
+    ResourceHandlerClass *rhc = RESOURCE_HANDLER_CLASS(oc);
     MachineClass *mc = MACHINE_CLASS(oc);
 
     /* Default 128 MB as guest ram size */
@@ -530,6 +553,12 @@ static void machine_class_init(ObjectClass *oc, void *data)
      */
     mc->numa_mem_align_shift = 23;
     mc->numa_auto_assign_ram = numa_default_auto_assign_ram;
+
+    /* default resource handler */
+    mc->get_resource_handler = machine_get_resource_handler;
+    rhc->pre_assign = machine_resource_handler_pre_assign;
+    rhc->assign = machine_resource_handler_assign;
+    rhc->unassign = machine_resource_handler_unassign;
 
     object_class_property_add_str(oc, "accel",
         machine_get_accel, machine_set_accel, &error_abort);
@@ -868,6 +897,10 @@ static const TypeInfo machine_info = {
     .instance_size = sizeof(MachineState),
     .instance_init = machine_initfn,
     .instance_finalize = machine_finalize,
+    .interfaces = (InterfaceInfo[]) {
+        { TYPE_RESOURCE_HANDLER },
+        { }
+    },
 };
 
 static void machine_register_types(void)
