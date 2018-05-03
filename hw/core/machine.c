@@ -21,6 +21,7 @@
 #include "qemu/error-report.h"
 #include "qemu/cutils.h"
 #include "sysemu/qtest.h"
+#include "hw/mem/memory-device.h"
 
 static char *machine_get_accel(Object *obj, Error **errp)
 {
@@ -520,6 +521,9 @@ void machine_set_cpu_numa_node(MachineState *machine,
 static ResourceHandler *machine_get_resource_handler(MachineState *machine,
                                                      const DeviceState *dev)
 {
+    if (object_dynamic_cast(OBJECT(dev), TYPE_MEMORY_DEVICE)) {
+        return RESOURCE_HANDLER(machine);
+    }
     return NULL;
 }
 
@@ -527,6 +531,19 @@ static void machine_resource_handler_pre_assign(ResourceHandler *rh,
                                                 const DeviceState *dev,
                                                 Error **errp)
 {
+    MachineState *ms = MACHINE(rh);
+    Error *local_err = NULL;
+
+    if (object_dynamic_cast(OBJECT(dev), TYPE_MEMORY_DEVICE)) {
+        const MemoryDeviceState *md = MEMORY_DEVICE(dev);
+
+        memory_device_pre_assign(ms, md, &local_err);
+        if (local_err) {
+            goto out;
+        }
+    }
+out:
+    error_propagate(errp, local_err);
 }
 
 static void machine_resource_handler_assign(ResourceHandler *rh,
