@@ -2329,6 +2329,20 @@ static void x86_nmi(NMIState *n, int cpu_index, Error **errp)
     }
 }
 
+static void pc_machine_enforce_memory_device_align(const MachineClass *mc,
+                                                   const MemoryDeviceState *md,
+                                                   uint64_t *align)
+{
+    const PCMachineClass *pcmc = PC_MACHINE_CLASS(mc);
+
+    if (object_dynamic_cast(OBJECT(md), TYPE_PC_DIMM)) {
+        /* compat handling: force to TARGET_PAGE_SIZE */
+        if (!pcmc->enforce_aligned_dimm) {
+            *align = TARGET_PAGE_SIZE;
+        }
+    }
+}
+
 static void pc_machine_class_init(ObjectClass *oc, void *data)
 {
     MachineClass *mc = MACHINE_CLASS(oc);
@@ -2368,6 +2382,7 @@ static void pc_machine_class_init(ObjectClass *oc, void *data)
     hc->unplug = pc_machine_device_unplug_cb;
     nc->nmi_monitor_handler = x86_nmi;
     mc->default_cpu_type = TARGET_DEFAULT_CPU_TYPE;
+    mc->enforce_memory_device_align = pc_machine_enforce_memory_device_align;
 
     object_class_property_add(oc, PC_MACHINE_DEVMEM_REGION_SIZE, "int",
         pc_machine_get_device_memory_region_size, NULL,

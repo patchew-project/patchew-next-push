@@ -9,6 +9,7 @@
 #include "qom/object.h"
 #include "qom/cpu.h"
 #include "hw/resource-handler.h"
+#include "hw/mem/memory-device.h"
 
 /**
  * memory_region_allocate_system_memory - Allocate a board's main memory
@@ -163,6 +164,10 @@ typedef struct {
  *    should instead use "unimplemented-device" for all memory ranges where
  *    the guest will attempt to probe for a device that QEMU doesn't
  *    implement and a stub device is required.
+ * @enforce_memory_device_align:
+ *    For some memory devices (e.g. DIMMs), alignment has to be enforced for
+ *    compat handling by the machine. This function will only modify the
+ *    asignment if it needs to be enforced.
  */
 struct MachineClass {
     /*< private >*/
@@ -220,6 +225,9 @@ struct MachineClass {
                                                          unsigned cpu_index);
     const CPUArchIdList *(*possible_cpu_arch_ids)(MachineState *machine);
     int64_t (*get_default_cpu_node_id)(const MachineState *ms, int idx);
+    void (*enforce_memory_device_align)(const MachineClass *mc,
+                                        const MemoryDeviceState *md,
+                                        uint64_t *align);
 };
 
 /**
