@@ -3669,6 +3669,13 @@ static HotplugHandler *spapr_get_hotplug_handler(MachineState *machine,
         object_dynamic_cast(OBJECT(dev), TYPE_SPAPR_CPU_CORE)) {
         return HOTPLUG_HANDLER(machine);
     }
+
+    if (dev->parent_bus) {
+        if (object_dynamic_cast(OBJECT(dev), TYPE_MEMORY_DEVICE)) {
+            return HOTPLUG_HANDLER(machine);
+        }
+    }
+
     return NULL;
 }
 
