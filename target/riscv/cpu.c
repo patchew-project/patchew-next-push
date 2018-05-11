@@ -199,6 +199,10 @@ static void riscv_cpu_dump_state(CPUState *cs, FILE *f,
     int i;
 
     cpu_fprintf(f, " %s " TARGET_FMT_lx "\n", "pc      ", env->pc);
+    if (flags & CPU_DUMP_FPU) {
+        cpu_fprintf(f, " %s " TARGET_FMT_lx "\n", "fcsr    ",
+                    cpu_riscv_get_fcsr(env));
+    }
 #ifndef CONFIG_USER_ONLY
     cpu_fprintf(f, " %s " TARGET_FMT_lx "\n", "mhartid ", env->mhartid);
     cpu_fprintf(f, " %s " TARGET_FMT_lx "\n", "mstatus ", env->mstatus);
