@@ -12,10 +12,13 @@
 
 #include "qemu/osdep.h"
 #include "qapi/error.h"
+#include "qapi/visitor.h"
 #include "hw/pci/pci.h"
 #include "hw/pci/pci_bus.h"
 #include "hw/pci/pci_host.h"
 #include "hw/pci/pci_bridge.h"
+#include "hw/pci-host/q35.h"
+#include "hw/pci-bridge/pci_expander_bridge.h"
 #include "qemu/range.h"
 #include "qemu/error-report.h"
 #include "sysemu/numa.h"
@@ -57,7 +60,13 @@ static PXBDev *convert_to_pxb(PCIDevice *dev)
 
 static GList *pxb_dev_list;
 
+typedef struct PXBPCIHost {
+    PCIExpressHost parent_obj;
+} PXBPCIHost;
+
 #define TYPE_PXB_HOST "pxb-host"
+#define PXB_HOST_DEVICE(obj) \
+     OBJECT_CHECK(PXBPCIHost, (obj), TYPE_PXB_HOST)
 
 static int pxb_bus_num(PCIBus *bus)
 {
@@ -111,6 +120,14 @@ static const char *pxb_host_root_bus_path(PCIHostState *host_bridge,
     return bus->bus_path;
 }
 
+static void pxb_host_get_mmcfg_size(Object *obj, Visitor *v, const char *name,
+                                    void *opaque, Error **errp)
+{
+    PCIExpressHost *e = PCIE_HOST_BRIDGE(obj);
+
+    visit_type_uint64(v, name, &e->size, errp);
+}
+
 static char *pxb_host_ofw_unit_address(const SysBusDevice *dev)
 {
     const PCIHostState *pxb_host;
@@ -142,6 +159,80 @@ static char *pxb_host_ofw_unit_address(const SysBusDevice *dev)
     return NULL;
 }
 
+static Object *pxb_get_i386_pci_host(void)
+{
+    PCIHostState *host;
+
+    host = OBJECT_CHECK(PCIHostState,
+                        object_resolve_path("/machine/i440fx", NULL),
+                        TYPE_PCI_HOST_BRIDGE);
+    if (!host) {
+        host = OBJECT_CHECK(PCIHostState,
+                            object_resolve_path("/machine/q35", NULL),
+                            TYPE_PCI_HOST_BRIDGE);
+    }
+
+    return OBJECT(host);
+}
+
+int pxhb_cnt = 0;
+
+/* -1 means to exclude q35 host */
+#define MCFG_IN_PCI_HOLE (((IO_APIC_DEFAULT_ADDRESS - MCH_HOST_BRIDGE_PCIEXBAR_DEFAULT) >> 28) - 1)
+
+int pxb_get_expander_hosts(void)
+{
+    return pxhb_cnt - MCFG_IN_PCI_HOLE;
+}
+
+/* Dirty workaround */
+static void modify_q35_pci_hole(void)
+{
+    Object *pci_host;
+    Q35PCIHost *s;
+
+    pci_host = pxb_get_i386_pci_host();
+    g_assert(pci_host);
+    s = Q35_HOST_DEVICE(pci_host);
+
+    ++pxhb_cnt;
+    if (pxhb_cnt <= MCFG_IN_PCI_HOLE) {
+        range_set_bounds(&s->mch.pci_hole,
+            MCH_HOST_BRIDGE_PCIEXBAR_DEFAULT + ((1 + pxhb_cnt) << 28),
+            IO_APIC_DEFAULT_ADDRESS - 1);
+    }
+
+    // leave pci hole64 to acpi build part
+}
+
+static void pxb_host_initfn(Object *obj)
+{
+    PCIHostState *phb = PCI_HOST_BRIDGE(obj);
+
+    memory_region_init_io(&phb->conf_mem, obj, &pci_host_conf_le_ops, phb,
+                          "pci-conf-idx", 4);
+    memory_region_init_io(&phb->data_mem, obj, &pci_host_data_le_ops, phb,
+                          "pci-conf-data", 4);
+
+    object_property_add(obj, PCIE_HOST_MCFG_SIZE, "uint64",
+                         pxb_host_get_mmcfg_size,
+                         NULL, NULL, NULL, NULL);
+
+    /* Leave enough space for the biggest MCFG BAR */
+    /* TODO. Since pxb host is just an expander bridge without an mch,
+     * we modify the range in q35 host. It should be workable as it is
+     * before acpi build, although it is dirty
+     */
+    modify_q35_pci_hole();
+}
+
+/* default value does not matter as guest firmware will overwrite it */
+static Property pxb_host_props[] = {
+    DEFINE_PROP_UINT64(PCIE_HOST_MCFG_BASE, PXBPCIHost, parent_obj.base_addr,
+                        MCH_HOST_BRIDGE_PCIEXBAR_DEFAULT),
+    DEFINE_PROP_END_OF_LIST(),
+};
+
 static void pxb_host_class_init(ObjectClass *class, void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(class);
@@ -149,6 +240,7 @@ static void pxb_host_class_init(ObjectClass *class, void *data)
     PCIHostBridgeClass *hc = PCI_HOST_BRIDGE_CLASS(class);
 
     dc->fw_name = "pci";
+    dc->props = pxb_host_props;
     /* Reason: Internal part of the pxb/pxb-pcie device, not usable by itself */
     dc->user_creatable = false;
     sbc->explicit_ofw_unit_address = pxb_host_ofw_unit_address;
@@ -157,7 +249,9 @@ static void pxb_host_class_init(ObjectClass *class, void *data)
 
 static const TypeInfo pxb_host_info = {
     .name          = TYPE_PXB_HOST,
-    .parent        = TYPE_PCI_HOST_BRIDGE,
+    .parent        = TYPE_PCIE_HOST_BRIDGE,
+    .instance_size = sizeof(PXBPCIHost),
+    .instance_init = pxb_host_initfn,
     .class_init    = pxb_host_class_init,
 };
 

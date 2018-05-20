@@ -34,6 +34,7 @@
 #include "hw/ide.h"
 #include "hw/pci/pci.h"
 #include "hw/pci/pci_bus.h"
+#include "hw/pci-bridge/pci_expander_bridge.h"
 #include "hw/nvram/fw_cfg.h"
 #include "hw/timer/hpet.h"
 #include "hw/smbios/smbios.h"
@@ -1466,6 +1467,7 @@ uint64_t pc_pci_hole64_start(void)
     PCMachineClass *pcmc = PC_MACHINE_GET_CLASS(pcms);
     MachineState *ms = MACHINE(pcms);
     uint64_t hole64_start = 0;
+    int pxb_hosts;
 
     if (pcmc->has_reserved_memory && ms->device_memory->base) {
         hole64_start = ms->device_memory->base;
@@ -1473,6 +1475,9 @@ uint64_t pc_pci_hole64_start(void)
             hole64_start += memory_region_size(&ms->device_memory->mr);
         }
     } else {
+        /* make sure enough space is left for pxb host, otherwise fail */
+        pxb_hosts = pxb_get_expander_hosts();
+        g_assert (pxb_hosts <= 0 || pcms->above_4g_mem_size >= (pxb_hosts << 28ULL));
         hole64_start = 0x100000000ULL + pcms->above_4g_mem_size;
     }
 
