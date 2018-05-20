@@ -89,6 +89,7 @@
 typedef struct AcpiMcfgInfo {
     uint64_t mcfg_base;
     uint32_t mcfg_size;
+    struct AcpiMcfgInfo *next;
 } AcpiMcfgInfo;
 
 typedef struct AcpiPmInfo {
@@ -2427,14 +2428,15 @@ build_mcfg_q35(GArray *table_data, BIOSLinker *linker, AcpiMcfgInfo *info)
 {
     AcpiTableMcfg *mcfg;
     const char *sig;
-    int len = sizeof(*mcfg) + 1 * sizeof(mcfg->allocation[0]);
+    int len, count = 0;
+    AcpiMcfgInfo *cfg = info;
 
+    while (cfg) {
+        ++count;
+        cfg = cfg->next;
+    }
+    len = sizeof(*mcfg) + count * sizeof(mcfg->allocation[0]);
     mcfg = acpi_data_push(table_data, len);
-    mcfg->allocation[0].address = cpu_to_le64(info->mcfg_base);
-    /* Only a single allocation so no need to play with segments */
-    mcfg->allocation[0].pci_segment = cpu_to_le16(0);
-    mcfg->allocation[0].start_bus_number = 0;
-    mcfg->allocation[0].end_bus_number = PCIE_MMCFG_BUS(info->mcfg_size - 1);
 
     /* MCFG is used for ECAM which can be enabled or disabled by guest.
      * To avoid table size changes (which create migration issues),
@@ -2448,6 +2450,17 @@ build_mcfg_q35(GArray *table_data, BIOSLinker *linker, AcpiMcfgInfo *info)
     } else {
         sig = "MCFG";
     }
+
+    count = 0;
+    while (info) {
+        mcfg[count].allocation[0].address = cpu_to_le64(info->mcfg_base);
+        /* Only a single allocation so no need to play with segments */
+        mcfg[count].allocation[0].pci_segment = cpu_to_le16(count);
+        mcfg[count].allocation[0].start_bus_number = 0;
+        mcfg[count++].allocation[0].end_bus_number = PCIE_MMCFG_BUS(info->mcfg_size - 1);
+        info = info->next;
+    }
+
     build_header(linker, table_data, (void *)mcfg, sig, len, 1, NULL, NULL);
 }
 
@@ -2602,26 +2615,52 @@ struct AcpiBuildState {
     MemoryRegion *linker_mr;
 } AcpiBuildState;
 
-static bool acpi_get_mcfg(AcpiMcfgInfo *mcfg)
+static inline void cleanup_mcfg(AcpiMcfgInfo *mcfg)
+{
+    AcpiMcfgInfo *tmp;
+    while (mcfg) {
+        tmp = mcfg->next;
+        g_free(mcfg);
+        mcfg = tmp;
+    }
+}
+
+static AcpiMcfgInfo *acpi_get_mcfg(void)
 {
     Object *pci_host;
     QObject *o;
+    AcpiMcfgInfo *head = NULL, *tail, *mcfg;
 
     pci_host = acpi_get_i386_pci_host();
     g_assert(pci_host);
 
-    o = object_property_get_qobject(pci_host, PCIE_HOST_MCFG_BASE, NULL);
-    if (!o) {
-        return false;
-    }
-    mcfg->mcfg_base = qnum_get_uint(qobject_to(QNum, o));
-    qobject_unref(o);
+    while (pci_host) {
+        mcfg = g_new0(AcpiMcfgInfo, 1);
+        mcfg->next = NULL;
+        if (!head) {
+            tail = head = mcfg;
+        } else {
+            tail->next = mcfg;
+            tail = mcfg;
+        }
 
-    o = object_property_get_qobject(pci_host, PCIE_HOST_MCFG_SIZE, NULL);
-    assert(o);
-    mcfg->mcfg_size = qnum_get_uint(qobject_to(QNum, o));
-    qobject_unref(o);
-    return true;
+        o = object_property_get_qobject(pci_host, PCIE_HOST_MCFG_BASE, NULL);
+        if (!o) {
+            cleanup_mcfg(head);
+            g_free(mcfg);
+            return NULL;
+        }
+        mcfg->mcfg_base = qnum_get_uint(qobject_to(QNum, o));
+        qobject_unref(o);
+
+        o = object_property_get_qobject(pci_host, PCIE_HOST_MCFG_SIZE, NULL);
+        assert(o);
+        mcfg->mcfg_size = qnum_get_uint(qobject_to(QNum, o));
+        qobject_unref(o);
+
+        pci_host = OBJECT(QTAILQ_NEXT(PCI_HOST_BRIDGE(pci_host), next));
+    }
+    return head;
 }
 
 static
@@ -2633,7 +2672,7 @@ void acpi_build(AcpiBuildTables *tables, MachineState *machine)
     unsigned facs, dsdt, rsdt, fadt;
     AcpiPmInfo pm;
     AcpiMiscInfo misc;
-    AcpiMcfgInfo mcfg;
+    AcpiMcfgInfo *mcfg;
     Range pci_hole, pci_hole64;
     uint8_t *u;
     size_t aml_len = 0;
@@ -2714,10 +2753,12 @@ void acpi_build(AcpiBuildTables *tables, MachineState *machine)
             build_slit(tables_blob, tables->linker);
         }
     }
-    if (acpi_get_mcfg(&mcfg)) {
+    if ((mcfg = acpi_get_mcfg()) != NULL) {
         acpi_add_table(table_offsets, tables_blob);
-        build_mcfg_q35(tables_blob, tables->linker, &mcfg);
+        build_mcfg_q35(tables_blob, tables->linker, mcfg);
     }
+    cleanup_mcfg(mcfg);
+
     if (x86_iommu_get_default()) {
         IommuType IOMMUType = x86_iommu_get_type();
         if (IOMMUType == TYPE_AMD) {
