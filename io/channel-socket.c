@@ -383,30 +383,6 @@ static void qio_channel_socket_init(Object *obj)
     ioc->fd = -1;
 }
 
-static void qio_channel_socket_finalize(Object *obj)
-{
-    QIOChannelSocket *ioc = QIO_CHANNEL_SOCKET(obj);
-
-    if (ioc->fd != -1) {
-        QIOChannel *ioc_local = QIO_CHANNEL(ioc);
-        if (qio_channel_has_feature(ioc_local, QIO_CHANNEL_FEATURE_LISTEN)) {
-            Error *err = NULL;
-
-            socket_listen_cleanup(ioc->fd, &err);
-            if (err) {
-                error_report_err(err);
-                err = NULL;
-            }
-        }
-#ifdef WIN32
-        WSAEventSelect(ioc->fd, NULL, 0);
-#endif
-        closesocket(ioc->fd);
-        ioc->fd = -1;
-    }
-}
-
-
 #ifndef WIN32
 static void qio_channel_socket_copy_fds(struct msghdr *msg,
                                         int **fds, size_t *nfds)
@@ -687,6 +663,8 @@ qio_channel_socket_close(QIOChannel *ioc,
     QIOChannelSocket *sioc = QIO_CHANNEL_SOCKET(ioc);
 
     if (sioc->fd != -1) {
+        SocketAddress *addr = socket_local_address(sioc->fd, errp);
+
 #ifdef WIN32
         WSAEventSelect(sioc->fd, NULL, 0);
 #endif
@@ -697,6 +675,19 @@ qio_channel_socket_close(QIOChannel *ioc,
             return -1;
         }
         sioc->fd = -1;
+
+        if (addr && addr->type == SOCKET_ADDRESS_TYPE_UNIX
+            && addr->u.q_unix.path) {
+            if (unlink(addr->u.q_unix.path) < 0 && errno != ENOENT) {
+                error_setg_errno(errp, errno,
+                                 "Failed to unlink socket %s",
+                                 addr->u.q_unix.path);
+            }
+        }
+
+        if (addr) {
+            qapi_free_SocketAddress(addr);
+        }
     }
     return 0;
 }
@@ -770,7 +761,6 @@ static const TypeInfo qio_channel_socket_info = {
     .name = TYPE_QIO_CHANNEL_SOCKET,
     .instance_size = sizeof(QIOChannelSocket),
     .instance_init = qio_channel_socket_init,
-    .instance_finalize = qio_channel_socket_finalize,
     .class_init = qio_channel_socket_class_init,
 };
 
