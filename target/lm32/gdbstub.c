@@ -82,10 +82,14 @@ int lm32_cpu_gdb_write_register(CPUState *cs, uint8_t *mem_buf, int n)
             env->ie = tmp;
             break;
         case 37:
+            qemu_mutex_lock_iothread();
             lm32_pic_set_im(env->pic_state, tmp);
+            qemu_mutex_unlock_iothread();
             break;
         case 38:
+            qemu_mutex_lock_iothread();
             lm32_pic_set_ip(env->pic_state, tmp);
+            qemu_mutex_unlock_iothread();
             break;
         }
     }
