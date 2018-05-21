@@ -4560,16 +4560,9 @@ void monitor_init(Chardev *chr, int flags)
     bool use_readline = flags & MONITOR_USE_READLINE;
     bool use_oob = flags & MONITOR_USE_OOB;
 
-    if (use_oob) {
-        if (CHARDEV_IS_MUX(chr)) {
-            error_report("Monitor Out-Of-Band is not supported with "
-                         "MUX typed chardev backend");
-            exit(1);
-        }
-        if (use_readline) {
-            error_report("Monitor Out-Of-band is only supported by QMP");
-            exit(1);
-        }
+    if (CHARDEV_IS_MUX(chr)) {
+        /* MUX is still not supported for Out-Of-Band */
+        use_oob = false;
     }
 
     monitor_data_init(mon, false, use_oob);
