@@ -560,6 +560,13 @@ static int nvme_init(BlockDriverState *bs, const char *device, int namespace,
     qemu_co_queue_init(&s->dma_flush_queue);
     s->nsid = namespace;
     s->aio_context = bdrv_get_aio_context(bs);
+
+    /* Fields we've not touched should be zero-initialized by block layer
+     * already, but reset them anyway to make the error handling code easier to
+     * reason. */
+    s->regs = NULL;
+    s->vfio = NULL;
+
     ret = event_notifier_init(&s->irq_notifier, 0);
     if (ret) {
         error_setg(errp, "Failed to init event notifier");
