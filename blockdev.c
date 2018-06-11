@@ -3053,34 +3053,54 @@ void qmp_x_block_dirty_bitmap_disable(const char *node, const char *name,
     bdrv_disable_dirty_bitmap(bitmap);
 }
 
-void qmp_x_block_dirty_bitmap_merge(const char *node, const char *dst_name,
-                                    const char *src_name, Error **errp)
+void qmp_x_block_dirty_bitmap_merge(const char *node, const char *target,
+                                    strList *bitmaps, Error **errp)
 {
     BlockDriverState *bs;
-    BdrvDirtyBitmap *dst, *src;
+    BdrvDirtyBitmap *dst, *src, *anon;
+    strList *lst;
+    Error *local_err = NULL;
 
-    dst = block_dirty_bitmap_lookup(node, dst_name, &bs, errp);
+    dst = block_dirty_bitmap_lookup(node, target, &bs, errp);
     if (!dst) {
         return;
     }
 
     if (bdrv_dirty_bitmap_frozen(dst)) {
         error_setg(errp, "Bitmap '%s' is frozen and cannot be modified",
-                   dst_name);
+                   target);
         return;
     } else if (bdrv_dirty_bitmap_readonly(dst)) {
         error_setg(errp, "Bitmap '%s' is readonly and cannot be modified",
-                   dst_name);
+                   target);
         return;
     }
 
-    src = bdrv_find_dirty_bitmap(bs, src_name);
-    if (!src) {
-        error_setg(errp, "Dirty bitmap '%s' not found", src_name);
+    anon = bdrv_create_dirty_bitmap(bs, bdrv_dirty_bitmap_granularity(dst),
+                                    NULL, errp);
+    if (!anon) {
         return;
     }
 
-    bdrv_merge_dirty_bitmap(dst, src, errp);
+    /* Aggregate bitmaps to anonymous temp bitmap */
+    for (lst = bitmaps; lst; lst = lst->next) {
+      src = bdrv_find_dirty_bitmap(bs, lst->value);
+      if (!src) {
+          error_setg(errp, "Dirty bitmap '%s' not found", lst->value);
+          goto out;
+      }
+      bdrv_merge_dirty_bitmap(anon, src, &local_err);
+      if (local_err) {
+          error_propagate(errp, local_err);
+          goto out;
+      }
+    }
+
+    /* Merge into dst; dst is unchanged on failure */
+    bdrv_merge_dirty_bitmap(dst, anon, errp);
+
+out:
+    bdrv_release_dirty_bitmap(bs, anon);
 }
 
 BlockDirtyBitmapSha256 *qmp_x_debug_block_dirty_bitmap_sha256(const char *node,
