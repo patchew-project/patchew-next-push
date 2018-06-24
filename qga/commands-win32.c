@@ -31,6 +31,7 @@
 #include <lm.h>
 #include <wtsapi32.h>
 #include <wininet.h>
+#include <versionhelpers.h>
 
 #include "guest-agent-core.h"
 #include "vss-win32.h"
@@ -878,6 +879,11 @@ qmp_guest_fstrim(bool has_minimum, int64_t minimum, Error **errp)
         error_setg(errp, "fstrim is only supported for Win8+");
         return NULL;
     }
+
+   if (!IsWindows8OrGreater()) {
+        error_setg(errp, "fstrim is only supported for Win8+");
+        return NULL;
+   }
 
     handle = FindFirstVolumeW(guid, ARRAYSIZE(guid));
     if (handle == INVALID_HANDLE_VALUE) {
